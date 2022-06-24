@@ -34,6 +34,26 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
+// tidb就是三层 server层 -> sql层 -> 底层存储引擎接口
+// 此文件就定义底层KV层应该实现的接口
+// 最基本的要求是 带事务的 Key-Value 引擎，且提供 Go 语言的 Driver
+// 再高级一点的要求是 支持分布式计算接口，这样 TiDB 可以把一些计算请求下推到 存储引擎上进行
+// 存储引擎需要提供实现了这些接口的 Go 语言 Driver ;  TiDB 利用这些接口操作底层数据。
+//
+// 1 对于最基本的要求，定义在如下的几个接口中
+// Transaction ：事务基本操作
+// Retriever  ：读取数据的接口
+// Mutator ：修改数据的接口
+// Storage ：Driver 提供的基本功能
+// Snapshot ：在数据 Snapshot 上面的操作
+// Iterator ：Seek返回的结果，可以用于遍历数据
+// 有了上面这些接口，可以对数据做各种所需要的操作，完成全部 SQL 功能
+//
+// 2 但是为了更高效的进行运算,定义了一个高级计算接口
+// Client ：向下层发送请求以及获取下层存储引擎的计算能力
+// Request : 请求的内容
+// Response : 返回结果的抽象
+
 // UnCommitIndexKVFlag uses to indicate the index key/value is no need to commit.
 // This is used in the situation of the index key/value was unchanged when do update.
 // Usage:
@@ -59,6 +79,7 @@ type Getter interface {
 }
 
 // Retriever is the interface wraps the basic Get and Seek methods.
+// 读取数据的接口
 type Retriever interface {
 	Getter
 	// Iter creates an Iterator positioned on the first entry that k <= entry's key.
@@ -109,6 +130,7 @@ func (r *EmptyRetriever) IterReverse(_ Key) (Iterator, error) {
 }
 
 // Mutator is the interface wraps the basic Set and Delete methods.
+// 修改数据的接口
 type Mutator interface {
 	// Set sets the value for key k as v into kv store.
 	// v must NOT be nil or empty, otherwise it returns ErrCannotSetNilValue.
@@ -181,6 +203,7 @@ type LockCtx = tikvstore.LockCtx
 
 // Transaction defines the interface for operations inside a Transaction.
 // This is not thread safe.
+// 定义事务基本操作的接口
 type Transaction interface {
 	RetrieverMutator
 	AssertionProto
@@ -246,6 +269,7 @@ type AssertionProto interface {
 }
 
 // Client is used to send request to KV layer.
+// 向下层发送请求以及获取下层存储引擎的计算能力
 type Client interface {
 	// Send sends request to KV layer, returns a Response.
 	Send(ctx context.Context, req *Request, vars interface{}, option *ClientSendOption) Response
@@ -306,6 +330,7 @@ func (t StoreType) Name() string {
 }
 
 // Request represents a kv request.
+// 请求的内容
 type Request struct {
 	// Tp is the request type.
 	Tp        int64
@@ -386,6 +411,8 @@ type ResultSubset interface {
 }
 
 // Response represents the response returned from KV layer.
+// 返回结果的抽象
+// 向下层发送请求以及获取下层存储引擎的计算能力
 type Response interface {
 	// Next returns a resultSubset from a single storage unit.
 	// When full result set is returned, nil is returned.
@@ -395,6 +422,7 @@ type Response interface {
 }
 
 // Snapshot defines the interface for the snapshot fetched from KV store.
+// 在数据Snapshot上面的操作
 type Snapshot interface {
 	Retriever
 	// BatchGet gets a batch of values from snapshot.
@@ -431,6 +459,8 @@ type Driver interface {
 
 // Storage defines the interface for storage.
 // Isolation should be at least SI(SNAPSHOT ISOLATION)
+// 定义存储的接口
+// Driver提供的基本功能
 type Storage interface {
 	// Begin a global transaction
 	Begin(opts ...tikv.TxnOption) (Transaction, error)
@@ -481,6 +511,7 @@ type StorageWithPD interface {
 type FnKeyCmp func(key Key) bool
 
 // Iterator is the interface for a iterator on KV store.
+// Seek返回的结果，可以用于遍历数据
 type Iterator interface {
 	Valid() bool
 	Key() Key

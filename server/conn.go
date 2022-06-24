@@ -1049,6 +1049,9 @@ func (cc *clientConn) initConnect(ctx context.Context) error {
 // Run reads client query and writes query result to client in for loop, if there is a panic during query handling,
 // it will be recovered and log the panic error.
 // This function returns and the connection is closed if there is an IO error or there is a panic.
+// 在for循环中读取client查询并将查询结果写到client中去。
+// 如果在query处理过程中，有panic，则会被recover并记录这个panic错误
+// 如果有一个IO错误或者有一个panic发生，则这个函数返回，并且连接会关闭掉
 func (cc *clientConn) Run(ctx context.Context) {
 	defer func() {
 		r := recover()
@@ -1118,6 +1121,7 @@ func (cc *clientConn) Run(ctx context.Context) {
 		}
 
 		startTime := time.Now()
+		// 单个Session处理命令的入口方法
 		err = cc.dispatch(ctx, data)
 		cc.chunkAlloc.Reset()
 		if err != nil {
@@ -1264,6 +1268,10 @@ func (cc *clientConn) addMetrics(cmd byte, startTime time.Time, err error) {
 // dispatch handles client request based on command which is the first byte of the data.
 // It also gets a token from server which is used to limit the concurrently handling clients.
 // The most frequently used command is ComQuery.
+// 基于命令处理client请求
+// 也就是数据的第一个字节
+// 也会从server获取一个token     这个token是用于限制并发处理clients
+// 最常用的命令是 ComQuery
 func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 	defer func() {
 		// reset killed for each request
